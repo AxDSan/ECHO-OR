@@ -18,17 +18,17 @@ nltk.download('punkt')
 nltk.download('punkt_tab')
 
 # Configuration Parameters
-API_URL = "https://openrouter.ai/api/v1"
-API_KEY = os.getenv("OPENROUTER_API_KEY")
-YOUR_APP_NAME = "ECHO"  # Replace with your actual app name
+API_URL = Config.API_URL
+API_KEY = Config.API_KEY
+YOUR_APP_NAME = Config.YOUR_APP_NAME
 
-LLM_MODEL_NAME = "google/gemini-flash-1.5"  # You can change this to other models supported by OpenRouter
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-NUM_CLUSTERS = 5
-NUM_ITERATIONS = 3
-TOP_DEMONSTRATIONS = 5
-DIVERSITY_THRESHOLD = 0.7
-BATCH_SIZE = 4
+LLM_MODEL_NAME = Config.LLM_MODEL_NAME
+EMBEDDING_MODEL_NAME = Config.EMBEDDING_MODEL
+NUM_CLUSTERS = Config.NUM_CLUSTERS
+NUM_ITERATIONS = Config.NUM_ITERATIONS
+TOP_DEMONSTRATIONS = Config.TOP_DEMONSTRATIONS
+DIVERSITY_THRESHOLD = Config.DIVERSITY_THRESHOLD
+BATCH_SIZE = Config.BATCH_SIZE
 
 INITIAL_PROMPT_TEMPLATE = """You are an advanced and complex AI that allows critical and complex logic thinking\n{question}\nLet's think step by step and find out whats unique in the question or the logic itself to find the answer."""
 REFINEMENT_PROMPT_TEMPLATE = """Based on the following Q&A pairs:
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 # Initialize OpenAI client
 client = AsyncOpenAI(
     base_url=Config.API_URL,
-    api_key=Config.OPENROUTER_API_KEY,
+    api_key=Config.API_KEY,
 )
 
 embedding_service = EmbeddingService()
@@ -273,7 +273,32 @@ async def main():
         )
         
         # Inference with new question
-        new_question = "A man has 53 socks in his drawer: 21 identical blue, 15 identical black and 17 identical red. The lights are out and he is completely in the dark. How many socks must he take out to make 100 percent certain he has at least one pair of black socks?"
+        new_question = """
+Five friends have their gardens next to one another, where they grow three kinds of crops: fruits (apple, pear, nut, cherry), vegetables (carrot, parsley, gourd, onion) and flowers (aster, rose, tulip, lily).
+
+1. They grow 12 different varieties.
+2. Everybody grows exactly 4 different varieties
+3. Each variety is at least in one garden.
+4. Only one variety is in 4 gardens.
+5. Only in one garden are all 3 kinds of crops.
+6. Only in one garden are all 4 varieties of one kind of crops.
+7. Pear is only in the two border gardens.
+8. Paul's garden is in the middle with no lily.
+9. Aster grower doesn't grow vegetables.
+10. Rose growers don't grow parsley.
+11. Nuts grower has also gourd and parsley.
+12. In the first garden are apples and cherries.
+13. Only in two gardens are cherries.
+14. Sam has onions and cherries.
+15. Luke grows exactly two kinds of fruit.
+16. Tulip is only in two gardens.
+17. Apple is in a single garden.
+18. Only in one garden next to Zick's is parsley.
+19. Sam's garden is not on the border.
+20. Hank grows neither vegetables nor asters.
+21. Paul has exactly three kinds of vegetable.
+
+Who has which garden and what is grown where?"""
         answer = await generate_answer_api(new_question, selected_demonstrations)
         logger.info(f"Q: {new_question}\nA: {answer}")
     

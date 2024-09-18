@@ -45,8 +45,8 @@ class DemonstrationRefiner:
                 current_length = len(demo['rationale'])
                 new_length = len(new_rationale)
                 
-                if 50 <= new_length <= Config.MAX_TOKENS*4 and new_length > current_length:
-                    demo['rationale'] = new_rationale[:Config.MAX_TOKENS*4]
+                if 50 <= new_length <= Config.MAX_TOKENS and new_length > current_length:
+                    demo['rationale'] = new_rationale[:Config.MAX_TOKENS]
                     print(f"Updated rationale for demonstration {idx + 1}")
                 else:
                     print(f"Kept original rationale for demonstration {idx + 1}")

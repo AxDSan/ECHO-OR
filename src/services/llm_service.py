@@ -5,7 +5,7 @@ class LLMService:
     def __init__(self):
         self.client = AsyncOpenAI(
             base_url=Config.API_URL,
-            api_key=Config.OPENROUTER_API_KEY,
+            api_key=Config.API_KEY,
         )
 
     async def generate_text(self, prompt, max_tokens, temperature, top_p, repetition_penalty):

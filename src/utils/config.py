@@ -4,14 +4,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-    EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-    MAX_TOKENS = 1024
-    NUM_ITERATIONS = 3
     API_URL = "https://openrouter.ai/api/v1"
+    API_KEY = os.getenv('OPENROUTER_API_KEY')
+    MAX_TOKENS = 8192
     LLM_MODEL_NAME = "google/gemini-flash-1.5"
-    NUM_CLUSTERS = 3
+    EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+    NUM_CLUSTERS = 9
     TOP_DEMONSTRATIONS = 5
+    NUM_ITERATIONS = 9
     DIVERSITY_THRESHOLD = 0.7
     BATCH_SIZE = 4
     YOUR_APP_NAME = "ECHO"
