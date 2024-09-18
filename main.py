@@ -24,7 +24,7 @@ TOP_DEMONSTRATIONS = 5
 DIVERSITY_THRESHOLD = 0.7
 BATCH_SIZE = 4
 
-INITIAL_PROMPT_TEMPLATE = """You are an advanced and complex AI that allows critical and complex logic thinking\n{question}\nLet's think step by step to find the answer."""
+INITIAL_PROMPT_TEMPLATE = """You are an advanced and complex AI that allows critical and complex logic thinking\n{question}\nLet's think step by step and find out whats unique in the question or the logic itself to find the answer."""
 REFINEMENT_PROMPT_TEMPLATE = """Based on the following Q&A pairs:
 {demonstrations}
 Refine the rationale for the question below.
@@ -308,7 +308,7 @@ async def main():
         )
         
         # Inference with new question
-        new_question = "How many r's are in the word strawberry?"
+        new_question = "How many r's are in strawberry?"
         answer = await generate_answer_api(new_question, selected_demonstrations)
         logger.info(f"Q: {new_question}\nA: {answer}")
     
