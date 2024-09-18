@@ -24,7 +24,7 @@ YOUR_APP_NAME = "ECHO"  # Replace with your actual app name
 
 LLM_MODEL_NAME = "google/gemini-flash-1.5"  # You can change this to other models supported by OpenRouter
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-NUM_CLUSTERS = 3
+NUM_CLUSTERS = 5
 NUM_ITERATIONS = 3
 TOP_DEMONSTRATIONS = 5
 DIVERSITY_THRESHOLD = 0.7
@@ -143,10 +143,10 @@ def select_top_demonstrations(
     top_k: int,
     diversity_threshold: float,
 ) -> List[Dict[str, str]]:
-    logger.info("Selecting top demonstrations based on length, ROUGE score, and diversity...")
+    logger.info("Selecting top demonstrations based on length, ROGUE score, and diversity...")
     
-    # Sort demonstrations by ROUGE score and rationale length in descending order
-    sorted_demos = sorted(demonstrations, key=lambda x: (x['rouge_score'], len(x['rationale'])), reverse=True)
+    # Sort demonstrations by ROGUE score and rationale length in descending order
+    sorted_demos = sorted(demonstrations, key=lambda x: (x['rogue_score'], len(x['rationale'])), reverse=True)
     
     selected = []
     embeddings = [embedding_model.encode(demo['question']) for demo in sorted_demos]
@@ -197,16 +197,16 @@ async def refine_demonstrations(
                 logger.warning(f"Empty rationale generated for question: {demo['question']}")
                 continue
             
-            # Calculate ROUGE score
-            rouge_score = rogue_service.calculate_score(new_rationale, demo['rationale'])
+            # Calculate rogue score
+            rogue_score = rogue_service.calculate_score(new_rationale, demo['rationale'])
             
-            # Simple heuristic: prefer longer rationales with higher ROUGE scores
+            # Simple heuristic: prefer longer rationales with higher rogue scores
             current_length = len(demo['rationale'])
             new_length = len(new_rationale)
             
-            if 50 <= new_length <= 1024*4 and (new_length > current_length or rouge_score > demo['rouge_score']):
+            if 50 <= new_length <= 1024*4 and (new_length > current_length or rogue_score > demo['rogue_score']):
                 demo['rationale'] = new_rationale[:1024*4]
-                demo['rouge_score'] = rouge_score
+                demo['rogue_score'] = rogue_score
                 logger.info(f"Updated rationale for demonstration {idx + 1}")
             else:
                 logger.info(f"Kept original rationale for demonstration {idx + 1}")
@@ -273,7 +273,7 @@ async def main():
         )
         
         # Inference with new question
-        new_question = "How many r's are in strawberry?"
+        new_question = "A man has 53 socks in his drawer: 21 identical blue, 15 identical black and 17 identical red. The lights are out and he is completely in the dark. How many socks must he take out to make 100 percent certain he has at least one pair of black socks?"
         answer = await generate_answer_api(new_question, selected_demonstrations)
         logger.info(f"Q: {new_question}\nA: {answer}")
     

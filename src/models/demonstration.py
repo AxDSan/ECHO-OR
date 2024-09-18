@@ -5,4 +5,4 @@ class Demonstration:
     question: str
     answer: str
     rationale: str
-    rouge_score: float = 0.0
+    rogue_score: float = 0.0

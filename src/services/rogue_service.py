@@ -14,7 +14,7 @@ class RogueService:
             reference_tokens = word_tokenize(reference_text)
             generated_tokens = word_tokenize(generated_text)
             
-            # Calculate BLEU score as an approximation of ROUGE
+            # Calculate BLEU score as an approximation of ROGUE
             score = sentence_bleu([reference_tokens], generated_tokens)
             return score
         except LookupError as e:
@@ -26,5 +26,5 @@ class RogueService:
             score = sentence_bleu([reference_tokens], generated_tokens)
             return score
         except Exception as e:
-            logger.error(f"Error calculating ROUGE score: {e}")
+            logger.error(f"Error calculating rogue score: {e}")
             return 0.0  # Return 0 score in case of any other error
