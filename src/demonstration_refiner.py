@@ -2,7 +2,7 @@ import random
 from typing import List, Dict
 from src.services.embedding_service import EmbeddingService
 from src.services.llm_service import LLMService
-from src.services.rogue_service import RougeService
+from src.services.rogue_service import RogueService
 from src.utils.config import Config
 
 REFINEMENT_PROMPT_TEMPLATE = """Based on the following Q&A pairs:
@@ -13,10 +13,10 @@ Current Rationale: {current_rationale}
 Improved Rationale:"""
 
 class DemonstrationRefiner:
-    def __init__(self, embedding_service: EmbeddingService, llm_service: LLMService, rouge_service: RougeService):
+    def __init__(self, embedding_service: EmbeddingService, llm_service: LLMService, rogue_service: RogueService):
         self.embedding_service = embedding_service
         self.llm_service = llm_service
-        self.rouge_service = rouge_service
+        self.rogue_service = rogue_service
 
     async def refine_demonstrations(self, demonstrations: List[Dict[str, str]], num_iterations: int) -> List[Dict[str, str]]:
         for iteration in range(num_iterations):

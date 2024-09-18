@@ -9,12 +9,13 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 from src.services.embedding_service import EmbeddingService
 from src.services.llm_service import LLMService
-from src.services.rogue_service import RougeService
+from src.services.rogue_service import RogueService
 from src.demonstration_refiner import DemonstrationRefiner
 from src.utils.config import Config
 import logging
 import nltk
 nltk.download('punkt')
+nltk.download('punkt_tab')
 
 # Configuration Parameters
 API_URL = "https://openrouter.ai/api/v1"
@@ -49,9 +50,9 @@ client = AsyncOpenAI(
 
 embedding_service = EmbeddingService()
 llm_service = LLMService()
-rouge_service = RougeService()
+rogue_service = RogueService()
         
-refiner = DemonstrationRefiner(embedding_service, llm_service, rouge_service)
+refiner = DemonstrationRefiner(embedding_service, llm_service, rogue_service)
 
 async def send_prompt_async(prompts: List[str], max_length: int, temperature: float, top_p: float, repetition_penalty: float) -> List[str]:
     """
@@ -131,7 +132,7 @@ def sample_demonstrations(
                 "question": question,
                 "answer": answer,
                 "rationale": initial_rationale,
-                "rouge_score": 0.0,
+                "rogue_score": 0.0,
             })
             break  # Select the first suitable question in the cluster
     return demonstrations
@@ -142,11 +143,10 @@ def select_top_demonstrations(
     top_k: int,
     diversity_threshold: float,
 ) -> List[Dict[str, str]]:
-    """Selects top demonstrations based on length and diversity."""
-    logger.info("Selecting top demonstrations based on length and diversity...")
+    logger.info("Selecting top demonstrations based on length, ROUGE score, and diversity...")
     
-    # Sort demonstrations by rationale length in descending order
-    sorted_demos = sorted(demonstrations, key=lambda x: len(x['rationale']), reverse=True)
+    # Sort demonstrations by ROUGE score and rationale length in descending order
+    sorted_demos = sorted(demonstrations, key=lambda x: (x['rouge_score'], len(x['rationale'])), reverse=True)
     
     selected = []
     embeddings = [embedding_model.encode(demo['question']) for demo in sorted_demos]
@@ -197,12 +197,16 @@ async def refine_demonstrations(
                 logger.warning(f"Empty rationale generated for question: {demo['question']}")
                 continue
             
-            # Simple heuristic: prefer longer rationales, but not too long
+            # Calculate ROUGE score
+            rouge_score = rogue_service.calculate_score(new_rationale, demo['rationale'])
+            
+            # Simple heuristic: prefer longer rationales with higher ROUGE scores
             current_length = len(demo['rationale'])
             new_length = len(new_rationale)
             
-            if 50 <= new_length <= 1024*4 and new_length > current_length:
+            if 50 <= new_length <= 1024*4 and (new_length > current_length or rouge_score > demo['rouge_score']):
                 demo['rationale'] = new_rationale[:1024*4]
+                demo['rouge_score'] = rouge_score
                 logger.info(f"Updated rationale for demonstration {idx + 1}")
             else:
                 logger.info(f"Kept original rationale for demonstration {idx + 1}")
