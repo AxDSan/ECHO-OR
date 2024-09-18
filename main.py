@@ -274,9 +274,9 @@ async def main():
         
         # Inference with new question
         new_question = """
-Solve the following (each letter is a digit) and provide a short output:
+Solve the following (each letter is a separate digit):
 
-COW x COW = DEDCOW
+(L+O+G+I+C)3 = LOGIC
 """
         answer = await generate_answer_api(new_question, selected_demonstrations)
         logger.info(f"Q: {new_question}\nA: {answer}")

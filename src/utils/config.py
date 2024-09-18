@@ -7,7 +7,7 @@ class Config:
     API_URL = "https://openrouter.ai/api/v1"
     API_KEY = os.getenv('OPENROUTER_API_KEY')
     MAX_TOKENS = 8192
-    LLM_MODEL_NAME = "microsoft/wizardlm-2-8x22b"
+    LLM_MODEL_NAME = "openai/gpt-4o-mini-2024-07-18"
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     NUM_CLUSTERS = 9
     TOP_DEMONSTRATIONS = 3
