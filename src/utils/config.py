@@ -7,11 +7,11 @@ class Config:
     API_URL = "https://openrouter.ai/api/v1"
     API_KEY = os.getenv('OPENROUTER_API_KEY')
     MAX_TOKENS = 8192
-    LLM_MODEL_NAME = "google/gemini-flash-1.5"
+    LLM_MODEL_NAME = "microsoft/wizardlm-2-8x22b"
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     NUM_CLUSTERS = 9
-    TOP_DEMONSTRATIONS = 5
-    NUM_ITERATIONS = 9
+    TOP_DEMONSTRATIONS = 3
+    NUM_ITERATIONS = 3
     DIVERSITY_THRESHOLD = 0.7
     BATCH_SIZE = 4
     YOUR_APP_NAME = "ECHO"
