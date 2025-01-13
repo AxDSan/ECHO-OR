@@ -1,0 +1,7 @@
+python-dotenv
+sentence-transformers
+scikit-learn
+numpy
+litellm
+openai
+nltk

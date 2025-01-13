@@ -67,3 +67,26 @@ class DemonstrationRefiner:
             )
             rationales.append(rationale)
         return rationales
+
+def build_chain_of_thought_prompt(question: str, demonstrations: List[Dict]) -> str:
+    """
+    Constructs a chain-of-thought style prompt by showing Q, chain-of-thought, and final answer
+    for each demonstration, then requests a new chain-of-thought for the user’s question.
+    """
+    # We assume each demonstration dict has keys: question, answer, rationale
+    cot_sections = []
+    for demo in demonstrations:
+        cot_sections.append(
+            f"Q: {demo['question']}\n"
+            f"Chain-of-Thought: {demo['rationale']}\n"
+            f"A: {demo['answer']}\n"
+        )
+
+    # Now format the final prompt for the new question
+    prompt = (
+        "Below are several Q&A pairs with step-by-step reasoning.\n\n"
+        + "\n".join(cot_sections)
+        + f"\nQ: {question}\n"
+        + "Chain-of-Thought:"
+    )
+    return prompt

@@ -1,30 +1,55 @@
-from nltk.translate.bleu_score import sentence_bleu
-from nltk.tokenize import word_tokenize
-import logging
-
-logger = logging.getLogger(__name__)
+import re
+from collections import Counter
+from typing import List
 
 class RogueService:
     def __init__(self):
         pass
-
-    def calculate_score(self, generated_text, reference_text):
+    
+    def _tokenize(self, text: str) -> List[str]:
+        """Simple tokenization by splitting on spaces and removing punctuation"""
+        text = re.sub(r'[^\w\s]', '', text.lower())
+        return text.split()
+    
+    def calculate_score(self, generated_text: str, reference_text: str) -> float:
+        """
+        Simplified scoring using word overlap and repetition penalty
+        Returns a score between 0 and 1
+        """
         try:
-            # Tokenize the texts
-            reference_tokens = word_tokenize(reference_text)
-            generated_tokens = word_tokenize(generated_text)
+            # Tokenize both texts
+            gen_tokens = self._tokenize(generated_text)
+            ref_tokens = self._tokenize(reference_text)
             
-            # Calculate BLEU score as an approximation of ROGUE
-            score = sentence_bleu([reference_tokens], generated_tokens)
-            return score
-        except LookupError as e:
-            logger.error(f"NLTK resource error: {e}")
-            logger.info("Falling back to simple whitespace tokenization")
-            # Fallback to simple whitespace tokenization
-            reference_tokens = reference_text.split()
-            generated_tokens = generated_text.split()
-            score = sentence_bleu([reference_tokens], generated_tokens)
-            return score
+            if not gen_tokens or not ref_tokens:
+                return 0.0
+            
+            # Calculate word overlap
+            gen_counter = Counter(gen_tokens)
+            ref_counter = Counter(ref_tokens)
+            
+            common_words = set(gen_counter.keys()) & set(ref_counter.keys())
+            
+            if not common_words:
+                return 0.0
+            
+            # Calculate overlap score
+            overlap_score = len(common_words) / max(len(gen_counter), len(ref_counter))
+            
+            # Calculate repetition penalty
+            unique_ratio = len(set(gen_tokens)) / len(gen_tokens)
+            
+            # Combine scores
+            final_score = overlap_score * unique_ratio
+            
+            return min(1.0, final_score)
+            
         except Exception as e:
-            logger.error(f"Error calculating rogue score: {e}")
-            return 0.0  # Return 0 score in case of any other error
+            print(f"Error in calculate_score: {e}")
+            return 0.0
+    
+    def calculate_advanced_score(self, generated_text: str, reference_text: str) -> float:
+        """
+        Wrapper for calculate_score to maintain API compatibility
+        """
+        return self.calculate_score(generated_text, reference_text)

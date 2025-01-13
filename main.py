@@ -1,288 +1,181 @@
 import asyncio
-import os
-import random
-from typing import Dict, List
-
-from litellm import AsyncOpenAI
-from sentence_transformers import SentenceTransformer
-from sklearn.cluster import KMeans
+import logging
+import time
+import numpy as np
+from typing import Dict, List, Union
 from sklearn.metrics.pairwise import cosine_similarity
+
 from src.services.embedding_service import EmbeddingService
 from src.services.llm_service import LLMService
 from src.services.rogue_service import RogueService
-from src.demonstration_refiner import DemonstrationRefiner
 from src.utils.config import Config
-import logging
-import nltk
-nltk.download('punkt')
-nltk.download('punkt_tab')
 
-# Configuration Parameters
-API_URL = Config.API_URL
-API_KEY = Config.API_KEY
-YOUR_APP_NAME = Config.YOUR_APP_NAME
-
-LLM_MODEL_NAME = Config.LLM_MODEL_NAME
-EMBEDDING_MODEL_NAME = Config.EMBEDDING_MODEL
-NUM_CLUSTERS = Config.NUM_CLUSTERS
-NUM_ITERATIONS = Config.NUM_ITERATIONS
-TOP_DEMONSTRATIONS = Config.TOP_DEMONSTRATIONS
-DIVERSITY_THRESHOLD = Config.DIVERSITY_THRESHOLD
-BATCH_SIZE = Config.BATCH_SIZE
-
-INITIAL_PROMPT_TEMPLATE = """You are an advanced and complex AI that allows critical and complex logic thinking\n{question}\nLet's think step by step and find out whats unique in the question or the logic itself to find the answer."""
-REFINEMENT_PROMPT_TEMPLATE = """Based on the following Q&A pairs:
-{demonstrations}
-Refine the rationale for the question below.
-Question: {question}
-Current Rationale: {current_rationale}
-Improved Rationale:"""
-
-# Setup Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
-client = AsyncOpenAI(
-    base_url=Config.API_URL,
-    api_key=Config.API_KEY,
-)
-
+# Initialize services at module level
 embedding_service = EmbeddingService()
 llm_service = LLMService()
 rogue_service = RogueService()
-        
-refiner = DemonstrationRefiner(embedding_service, llm_service, rogue_service)
 
-async def send_prompt_async(prompts: List[str], max_length: int, temperature: float, top_p: float, repetition_penalty: float) -> List[str]:
-    """
-    Asynchronously send prompts to the hosted model and retrieve responses using OpenAI client.
-    """
-    async def process_prompt(prompt):
-        try:
-            completion = await client.chat.completions.create(
-                extra_headers={
-                    "X-Title": YOUR_APP_NAME,
-                },
-                model=LLM_MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=max_length,
-                temperature=temperature,
-                top_p=top_p,
-                frequency_penalty=repetition_penalty,
-                n=1,
-            )
-            return completion.choices[0].message.content.strip()
-        except Exception as e:
-            logger.error(f"Error generating completion: {e}", exc_info=True)
-            return ""
-
-    rationales = await asyncio.gather(*[process_prompt(prompt) for prompt in prompts])
-    return rationales
-
-async def generate_zero_shot_cot_batch_api(questions_batch: List[str]) -> List[str]:
-    prompts = [INITIAL_PROMPT_TEMPLATE.format(question=q) for q in questions_batch]
-    rationales = await send_prompt_async(prompts, max_length=4096, temperature=0.0, top_p=0.95, repetition_penalty=1.2)
-    return rationales
-
-async def generate_refined_cot_batch_api(refinement_prompts: List[str]) -> List[str]:
-    rationales = await send_prompt_async(refinement_prompts, max_length=4096, temperature=0.7, top_p=0.95, repetition_penalty=1.2)
-    return rationales
-
-def load_sentence_transformer_model() -> SentenceTransformer:
-    """Loads the Sentence-BERT embedding model."""
-    try:
-        logger.info("Loading Sentence-BERT model...")
-        embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME, device="cpu")
-        return embedding_model
-    except Exception as e:
-        logger.error(f"Error loading Sentence-BERT model: {e}", exc_info=True)
-        raise e
-
-def cluster_questions(questions: List[str], embedding_model: SentenceTransformer, num_clusters: int) -> Dict[int, List[int]]:
-    """Clusters questions based on their semantic embeddings."""
-    if len(questions) < num_clusters:
-        logger.warning(f"Number of clusters ({num_clusters}) is greater than the number of questions ({len(questions)}). Adjusting num_clusters to {len(questions)}.")
-        num_clusters = len(questions)
+async def fetch_most_relevant_demonstrations(question: str, k=5) -> List[Dict]:
+    """Optimized version with batch processing"""
+    logger.info("Starting to fetch demonstrations...")
     
-    logger.info("Clustering questions...")
-    question_embeddings = embedding_model.encode(questions, convert_to_tensor=False, show_progress_bar=True)
-    clustering = KMeans(n_clusters=num_clusters, random_state=42)
-    clusters = clustering.fit_predict(question_embeddings)
+    # Get question embedding - ensure it's 2D
+    question_vec = embedding_service.get_embeddings(question)
+    if question_vec.ndim == 3:
+        question_vec = question_vec.reshape(question_vec.shape[0], -1)
     
-    clustered_questions = {}
-    for idx, cluster_id in enumerate(clusters):
-        clustered_questions.setdefault(cluster_id, []).append(idx)
+    # Batch process all demonstrations at once
+    demo_questions = [item["question"] for item in Config.dataset]
+    demo_vecs = embedding_service.get_embeddings(demo_questions)
+    if demo_vecs.ndim == 3:
+        demo_vecs = demo_vecs.reshape(demo_vecs.shape[0], -1)
     
-    return clustered_questions
+    logger.debug(f"Question vector shape: {question_vec.shape}")
+    logger.debug(f"Demo vectors shape: {demo_vecs.shape}")
+    
+    # Compute similarities in one go
+    similarities = cosine_similarity(question_vec, demo_vecs)[0]
+    
+    # Get top k indices
+    top_indices = np.argsort(similarities)[-k:][::-1]
+    
+    logger.info(f"Found {k} most relevant demonstrations")
+    return [Config.dataset[i] for i in top_indices]
 
-def sample_demonstrations(
-    dataset: List[Dict[str, str]],
-    clustered_questions: Dict[int, List[int]]
-) -> List[Dict[str, str]]:
-    """Selects representative questions from each cluster."""
-    demonstrations = []
-    logger.info("Sampling demonstrations...")
-    for cluster_id, indices in clustered_questions.items():
-        for idx in indices:
-            question = dataset[idx]['question']
-            answer = dataset[idx]['answer']
-            initial_rationale = dataset[idx]['initial_rationale']
-            demonstrations.append({
-                "question": question,
-                "answer": answer,
-                "rationale": initial_rationale,
-                "rogue_score": 0.0,
-            })
-            break  # Select the first suitable question in the cluster
-    return demonstrations
+async def generate_chain_of_thought(question: str, demonstrations: List[Dict]) -> str:
+    logger.info("Generating chain of thought...")
+    
+    # Build the prompt
+    demo_texts = []
+    for demo in demonstrations:
+        demo_texts.append(
+            f"Q: {demo['question']}\n"
+            f"Chain-of-Thought: {demo['initial_rationale']}\n"
+            f"A: {demo['answer']}\n"
+        )
+    
+    prompt = (
+        "Below are several Q&A pairs with step-by-step reasoning.\n\n"
+        + "\n".join(demo_texts)
+        + f"\nQ: {question}\n"
+        + "Chain-of-Thought:"
+    )
+    
+    response = await llm_service.generate_text(
+        prompt=prompt,
+        max_tokens=512,
+        temperature=0.7,
+        top_p=0.9,
+        repetition_penalty=0.0
+    )
+    
+    logger.info("Chain of thought generated")
+    return response
 
-def select_top_demonstrations(
-    demonstrations: List[Dict[str, str]],
-    embedding_model: SentenceTransformer,
-    top_k: int,
-    diversity_threshold: float,
-) -> List[Dict[str, str]]:
-    logger.info("Selecting top demonstrations based on length, ROGUE score, and diversity...")
+async def self_consistency_final_answer(question: str, chain_of_thought: str, attempts: int = 3) -> str:
+    logger.info("Generating multiple final answers for consistency...")
     
-    # Sort demonstrations by ROGUE score and rationale length in descending order
-    sorted_demos = sorted(demonstrations, key=lambda x: (x['rogue_score'], len(x['rationale'])), reverse=True)
+    # Truncate chain_of_thought if too long (keeping the last part)
+    max_cot_length = 500
+    if len(chain_of_thought) > max_cot_length:
+        chain_of_thought = "..." + chain_of_thought[-max_cot_length:]
     
-    selected = []
-    embeddings = [embedding_model.encode(demo['question']) for demo in sorted_demos]
-    
-    for idx, demo in enumerate(sorted_demos):
-        if len(selected) >= top_k:
-            break
-        demo_embedding = embeddings[idx]
-        is_diverse = True
-        for selected_demo in selected:
-            selected_embedding = embedding_model.encode(selected_demo['question'])
-            similarity = cosine_similarity([demo_embedding], [selected_embedding])[0][0]
-            if similarity > diversity_threshold:
-                is_diverse = False
-                break
-        if is_diverse:
-            selected.append(demo)
-    
-    return selected
+    prompt_template = f"""
+Based on the reasoning:
+{chain_of_thought}
 
-async def refine_demonstrations(
-    demonstrations: List[Dict[str, str]],
-    embedding_model: SentenceTransformer,
-    num_iterations: int,
-) -> List[Dict[str, str]]:
-    """Refines rationales by iterative regeneration using other demonstrations as context."""
-    logger.info("Refining demonstrations iteratively...")
-    for iteration in range(num_iterations):
-        logger.info(f"Refinement Iteration {iteration + 1}/{num_iterations}")
-        random.shuffle(demonstrations)
-        
-        refinement_prompts = []
-        for demo in demonstrations:
-            other_demos = [d for d in demonstrations if d != demo]
-            demonstrations_str = "\n".join([f"Q: {d['question']}\nA: {d['rationale']}" for d in other_demos])
-            prompt = REFINEMENT_PROMPT_TEMPLATE.format(
-                demonstrations=demonstrations_str,
-                question=demo['question'],
-                current_rationale=demo['rationale']
-            )
-            refinement_prompts.append(prompt)
-        
-        refined_rationales = await generate_refined_cot_batch_api(refinement_prompts)
-        
-        for idx, (demo, new_rationale) in enumerate(zip(demonstrations, refined_rationales)):
-            logger.info(f"Processing demonstration {idx + 1}")
-            if not new_rationale:
-                logger.warning(f"Empty rationale generated for question: {demo['question']}")
-                continue
-            
-            # Calculate rogue score
-            rogue_score = rogue_service.calculate_score(new_rationale, demo['rationale'])
-            
-            # Simple heuristic: prefer longer rationales with higher rogue scores
-            current_length = len(demo['rationale'])
-            new_length = len(new_rationale)
-            
-            if 50 <= new_length <= 1024*4 and (new_length > current_length or rogue_score > demo['rogue_score']):
-                demo['rationale'] = new_rationale[:1024*4]
-                demo['rogue_score'] = rogue_score
-                logger.info(f"Updated rationale for demonstration {idx + 1}")
-            else:
-                logger.info(f"Kept original rationale for demonstration {idx + 1}")
-            
-            logger.info(f"Updated demonstration: {demo}")
-    
-    return demonstrations
+Give a very concise final answer (1-2 sentences max) to:
+Question: {question}
+Final Answer:"""
 
-async def generate_answer_api(new_question: str, selected_demonstrations: List[Dict[str, str]]) -> str:
-    """Generates an answer to a new question using the selected demonstrations via API."""
-    try:
-        prompt = ""
-        for demo in selected_demonstrations:
-            prompt += f"Q: {demo['question']}\nA: {demo['rationale']}\n\n"
-        prompt += f"Q: {new_question}\nA: Let's think step by step."
-        
-        completion = await client.chat.completions.create(
-            extra_headers={
-                "X-Title": YOUR_APP_NAME,
-            },
-            model=LLM_MODEL_NAME,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=4096,
+    # Generate all answers in parallel
+    tasks = []
+    for _ in range(attempts):
+        task = llm_service.generate_text(
+            prompt=prompt_template,
+            max_tokens=100,  # Reduced significantly
             temperature=0.7,
-            top_p=0.95,
-            frequency_penalty=1.2,
+            top_p=0.9,
+            repetition_penalty=0.0
         )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error(f"Error generating answer: {e}", exc_info=True)
-        return "Error: Unable to generate answer."
+        tasks.append(task)
+    
+    answers = await asyncio.gather(*tasks)
+    
+    # Score all answers
+    reference_text = question + " " + chain_of_thought
+    attempts_data = [
+        (answer, rogue_service.calculate_advanced_score(answer, reference_text))
+        for answer in answers if answer  # Only score non-empty answers
+    ]
+    
+    if not attempts_data:
+        return "Unable to generate a consistent answer."
+        
+    best_answer, best_score = max(attempts_data, key=lambda x: x[1])
+    logger.info("Final answer selected")
+    return best_answer
 
-async def main():
+async def process_question(question: str) -> str:
+    """Main processing function"""
+    logger.info(f"Processing question: {question}")
+    
+    start_time = time.time()
+    
     try:
-        embedding_model = load_sentence_transformer_model()
-    
-        # Replace with actual dataset loading
-        dataset = Config.dataset
+        # Fetch demonstrations
+        demo_start = time.time()
+        top_demos = await fetch_most_relevant_demonstrations(question, k=3)
+        logger.info(f"Fetching demonstrations took: {time.time() - demo_start:.2f}s")
         
-        clustered_questions = cluster_questions(
-            questions=[item["question"] for item in dataset],
-            embedding_model=embedding_model,
-            num_clusters=NUM_CLUSTERS,
-        )
+        # Generate chain-of-thought
+        cot_start = time.time()
+        chain_of_thought = await generate_chain_of_thought(question, top_demos)
+        logger.info(f"Generating chain-of-thought took: {time.time() - cot_start:.2f}s")
         
-        demonstrations = sample_demonstrations(
-            dataset=dataset,
-            clustered_questions=clustered_questions,
-        )
+        # Generate final answer
+        answer_start = time.time()
+        final_answer = await self_consistency_final_answer(question, chain_of_thought, attempts=3)
+        logger.info(f"Generating final answer took: {time.time() - answer_start:.2f}s")
         
-        # Refine rationales
-        refined_demonstrations = await refine_demonstrations(
-            demonstrations=demonstrations,
-            embedding_model=embedding_model,
-            num_iterations=NUM_ITERATIONS,
-        )
+        logger.info(f"Total processing time: {time.time() - start_time:.2f}s")
+        return final_answer
         
-        # Select top demonstrations
-        selected_demonstrations = select_top_demonstrations(
-            demonstrations=refined_demonstrations,
-            embedding_model=embedding_model,
-            top_k=TOP_DEMONSTRATIONS,
-            diversity_threshold=DIVERSITY_THRESHOLD,
-        )
-        
-        # Inference with new question
-        new_question = """
-Solve the following (each letter is a separate digit):
-
-(L+O+G+I+C)3 = LOGIC
-"""
-        answer = await generate_answer_api(new_question, selected_demonstrations)
-        logger.info(f"Q: {new_question}\nA: {answer}")
-    
     except Exception as e:
-        logger.error(f"An unexpected error occurred in main: {e}", exc_info=True)
+        logger.error(f"Error during processing: {e}")
+        raise
+
+def main():
+    """Entry point function"""
+    question_input = """A girl meets a lion and unicorn in the forest. The lion lies every Monday, Tuesday and Wednesday, and the other days, he speaks the truth. The unicorn lies on Thursdays, Fridays and Saturdays, and the other days of the week, he speaks the truth. "Yesterday, I was lying," the lion told the girl. "So was I," said the unicorn. What day is it?"""
+
+    
+    try:
+        # Create new event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Run the async function
+        answer = loop.run_until_complete(process_question(question_input))
+        
+        # Close the loop
+        loop.close()
+        
+        print(f"\nQuestion: {question_input}")
+        print(f"Answer: {answer}\n")
+        
+    except Exception as e:
+        logger.error(f"Failed to process question: {e}")
+        raise
+    finally:
+        # Ensure we clean up the loop
+        try:
+            loop.close()
+        except:
+            pass
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

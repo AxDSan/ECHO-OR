@@ -1,13 +1,17 @@
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
 class Config:
     API_URL = "https://openrouter.ai/api/v1"
     API_KEY = os.getenv('OPENROUTER_API_KEY')
-    MAX_TOKENS = 8192
-    LLM_MODEL_NAME = "openai/gpt-4o-mini-2024-07-18"
+    if not API_KEY:
+        raise ValueError("OPENROUTER_API_KEY environment variable is not set")
+    
+    MAX_TOKENS = 131000  # Reduced from 16000
+    LLM_MODEL_NAME = "microsoft/phi-4"
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     NUM_CLUSTERS = 9
     TOP_DEMONSTRATIONS = 3
