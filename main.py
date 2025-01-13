@@ -150,7 +150,7 @@ async def process_question(question: str) -> str:
 
 def main():
     """Entry point function"""
-    question_input = """A girl meets a lion and unicorn in the forest. The lion lies every Monday, Tuesday and Wednesday, and the other days, he speaks the truth. The unicorn lies on Thursdays, Fridays and Saturdays, and the other days of the week, he speaks the truth. "Yesterday, I was lying," the lion told the girl. "So was I," said the unicorn. What day is it?"""
+    question_input = """Sally (a girl) has 3 brothers. Each brother has 2 sisters. How many sisters does Sally have?"""
 
     
     try:
